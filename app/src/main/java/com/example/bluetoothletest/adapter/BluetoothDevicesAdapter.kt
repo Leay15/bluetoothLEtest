@@ -10,22 +10,23 @@ import android.widget.Switch
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bluetoothletest.R
+import com.welie.blessed.BluetoothPeripheral
 import kotlinx.android.synthetic.main.bluetooth_device_item_layout.view.*
 
-class BluetoothDevicesAdapter(val callback: (device: BluetoothDevice) -> Unit) :
+class BluetoothDevicesAdapter(val callback: (device: BluetoothPeripheral) -> Unit) :
     RecyclerView.Adapter<BluetoothDevicesAdapter.ViewHolder>() {
 
-    private var devicesList = mutableListOf<BluetoothDevice>()
+    private var devicesList = mutableListOf<BluetoothPeripheral>()
     private var lastPosition = -1
     private var connectedAddress = ""
     var context: Context? = null
 
-    fun addAll(devices: List<BluetoothDevice>) {
+    fun addAll(devices: List<BluetoothPeripheral>) {
         devicesList.addAll(devices)
         notifyDataSetChanged()
     }
 
-    fun add(device: BluetoothDevice) {
+    fun add(device: BluetoothPeripheral) {
         devicesList.add(device)
         notifyDataSetChanged()
     }
@@ -36,7 +37,7 @@ class BluetoothDevicesAdapter(val callback: (device: BluetoothDevice) -> Unit) :
         notifyDataSetChanged()
     }
 
-    fun changeDeviceStatus(connectedDevice: BluetoothDevice?) {
+    fun changeDeviceStatus(connectedDevice: BluetoothPeripheral?) {
         connectedAddress = connectedDevice?.address ?: ""
         notifyDataSetChanged()
     }

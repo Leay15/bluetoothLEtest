@@ -11,7 +11,6 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Context.BLUETOOTH_SERVICE
-import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
@@ -23,6 +22,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.lang.reflect.InvocationTargetException
 import java.util.*
+import java.util.logging.Handler
+
 
 //The bluetooth permission is granted by PM
 @SuppressLint("MissingPermission")
@@ -36,12 +37,12 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
         const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
         const val BASE_BLUETOOTH_UUID = "00000000-0000-1000-8000-00805F9B34FB"
-        const val CYCLING_POWER_SERVICE_UUID = "00002A63-0000-1000-8000-00805F9B34FB"
+        const val CYCLING_POWER_MEASUREMENT_UUID = "00002A63-0000-1000-8000-00805F9B34FB"
         const val CYCLING_POWER_CONTROL_POINT_UUID = "00002A66-0000-1000-8000-00805F9B34FB"
     }
 
     val bluetoothLECommandQueue: Queue<Runnable> = LinkedList()
-    val commandQueueBussy = false
+    var commandQueueBussy = false
 
 
     val newBluetoothDevice = MutableLiveData<BluetoothDevice?>(null)
@@ -97,6 +98,8 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+
+    val notifyingCharacteristics = mutableListOf<UUID?>()
 
     private val gattCallback2 = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
@@ -166,9 +169,16 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
             super.onCharacteristicRead(gatt, characteristic, status)
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
+                    //Reading characteristic
                     Log.e("GATT_CHARACTERISTICS", characteristic.toString())
+
+                    //Processing characteristic data
+                }
+                else -> {
+                    Log.e("GATT_ERROR", "Read failed for characteristic")
                 }
             }
+            completedCommand()
         }
 
         override fun onCharacteristicChanged(
@@ -179,7 +189,131 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
             Log.e("GATT_CHARACTERISTIC", characteristic?.value.toString())
         }
 
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt?,
+            descriptor: BluetoothGattDescriptor?,
+            status: Int
+        ) {
+            super.onDescriptorWrite(gatt, descriptor, status)
+            val parentCharacteristic = descriptor?.characteristic
 
+            if (status == GATT_SUCCESS) {
+                descriptor?.run {
+                    if (descriptor.uuid == UUID.fromString(CCC_DESCRIPTOR_UUID)) {
+                        val value = descriptor.value
+
+                        value?.run {
+                            if (value[0] != 0.toByte()) {
+                                // Notify set to on, add it to the set of notifying characteristics
+                                notifyingCharacteristics.add(parentCharacteristic?.uuid)
+                            } else {
+                                // Notify was turned off, so remove it from the set of notifying characteristics
+                                notifyingCharacteristics.remove(parentCharacteristic?.uuid)
+                            }
+                        }
+
+                        //Normal setNotify
+                    } else {
+                        //Normal descriptor write
+                    }
+                    completedCommand()
+                }
+            }
+        }
+    }
+
+    var nrTries = 0
+    var isRetrying = false
+    private fun readGattCharacteristic(characteristic: BluetoothGattCharacteristic?): Boolean {
+        var result = false
+
+        bluetoothGatt2?.run {
+            characteristic?.let {
+                if (characteristic.properties and PROPERTY_READ === 0) {
+                    Log.e("GATT_PROPERTY", "ERROR: Characteristic cannot be read")
+                    false
+                }
+
+                result = bluetoothLECommandQueue.add(Runnable {
+                    if (!this.readCharacteristic(it)) {
+                        Log.e(
+                            "GATT_READ_ERROR",
+                            String.format(
+                                "ERROR: readCharacteristic failed for characteristic: %s",
+                                characteristic.uuid
+                            )
+                        )
+                        completedCommand()
+                    } else {
+                        Log.e(
+                            "GATT_READ",
+                            String.format("READ: characteristic %s", characteristic.uuid)
+                        )
+                        nrTries++
+                    }
+                })
+            }
+        }
+        if (result) {
+            nextCommand()
+        } else {
+            Log.e(
+                "GATT_ENQUEUE_ERROR",
+                String.format(
+                    "ERROR: readCharacteristic failed for characteristic: %s",
+                    characteristic?.uuid
+                )
+            )
+        }
+
+        return result
+    }
+
+    private fun nextCommand() {
+        if (commandQueueBussy) return
+
+        bluetoothGatt2?.run {
+            if (bluetoothLECommandQueue.isNotEmpty()) {
+                val btCommand = bluetoothLECommandQueue.peek()
+                commandQueueBussy = true
+                nrTries = 0
+
+                viewModelScope.async {
+                    try {
+                        btCommand?.run()
+                    } catch (e: Exception) {
+                        Log.e(
+                            "GATT_COMMAND_ERROR",
+                            String.format("ERROR: Command Exception for device")
+                        )
+                    }
+                }
+            }
+        } ?: kotlin.run {
+            bluetoothLECommandQueue.clear()
+            commandQueueBussy = false
+            Log.e("GATT_DEVICE_ERROR", String.format("ERROR: There's no GATT device anymore"))
+        }
+    }
+
+    private fun completedCommand() {
+        commandQueueBussy = false
+        isRetrying = false
+        bluetoothLECommandQueue.poll()
+        nextCommand()
+    }
+
+    private fun retryCommand() {
+        commandQueueBussy = false
+        val currentCommand = bluetoothLECommandQueue.peek()
+        currentCommand?.run {
+            if (nrTries >= 5) {
+                bluetoothLECommandQueue.poll()
+            } else {
+                isRetrying = true
+            }
+            nextCommand()
+        } ?: Log.e("GATT_COMMAND", "No existing command")
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -384,23 +518,31 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
         return true
     }
 
-    fun enableDataNotification(enable: Boolean) {
-        val characteristic = BluetoothGattCharacteristic(
-            UUID.fromString(
-                CYCLING_POWER_SERVICE_UUID
-            ),
-            PROPERTY_BROADCAST,
-            0
-        )
+    fun enableDataNotification(
+        characteristic: BluetoothGattCharacteristic?,
+        enable: Boolean
+    ): Boolean {
+        characteristic?.run {
+            val descriptor =
+                characteristic.getDescriptor(UUID.fromString(CCC_DESCRIPTOR_UUID))?.apply {
+                    value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                }
 
-        bluetoothGatt2?.setCharacteristicNotification(
-            characteristic, enable
-        )
+            var result = bluetoothLECommandQueue.add(Runnable {
+                bluetoothGatt2?.setCharacteristicNotification(
+                    characteristic, enable
+                )
 
-        val descriptor = characteristic.getDescriptor(UUID.fromString(CCC_DESCRIPTOR_UUID)).apply {
-            value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                bluetoothGatt2?.writeDescriptor(descriptor)
+            })
+
+            if (result) {
+                nextCommand()
+            }
+
+            return result
         }
-        bluetoothGatt2?.writeDescriptor(descriptor)
+        return false
     }
 
     //For cases when power metter has firmware updates
