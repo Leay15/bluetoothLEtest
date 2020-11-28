@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -43,6 +44,10 @@ class MainActivity : AppCompatActivity() {
             if (it) {
                 bluetoothViewModel.enableDataNotificationChanges(true)
             }
+        }
+
+        bluetoothViewModel.power.observe(this) {
+            Log.e("POWER: ", it.toString())
         }
     }
 

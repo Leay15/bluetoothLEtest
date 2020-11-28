@@ -8,13 +8,12 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.welie.blessed.BluetoothCentral
-import com.welie.blessed.BluetoothCentralCallback
-import com.welie.blessed.BluetoothPeripheral
+import com.welie.blessed.*
+import com.welie.blessed.BluetoothBytesParser.*
 import com.welie.blessed.BluetoothPeripheral.GATT_SUCCESS
-import com.welie.blessed.BluetoothPeripheralCallback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -43,6 +42,10 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
 
     val bluetoothDevicesList = MutableLiveData<MutableList<BluetoothPeripheral>>(mutableListOf())
     val isDeviceConnected = MutableLiveData(false)
+
+    val power: LiveData<Int>
+        get() = _power
+    private val _power: MutableLiveData<Int> = MutableLiveData(0)
 
     private var powerMetterDevice: BluetoothPeripheral? = null
 
@@ -163,8 +166,7 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
                     CYCLING_POWER_MEASUREMENT_UUID -> {
                         Log.e("GATT_EVENT", "PowerMeasurement")
 //                        Log.e("GATT_EVENT_DATA", "${}")
-
-
+                        onPowerDataReceived(value)
                     }
                     CYCLING_POWER_CONTROL_POINT_UUID -> {
                         Log.e("GATT_EVENT", "ControlPointEvent")
@@ -227,6 +229,59 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
             }
 
         }
+    }
+
+    private fun onPowerDataReceived(bytes: ByteArray) {
+        val parser = BluetoothBytesParser(bytes)
+
+        val flags = parser.getIntValue(FORMAT_UINT16)
+
+        val hasPedalPowerBalance = (flags and 0x0001) > 0
+        val pedalPowerBalanceKnownLeft = (flags and 0x0002) > 0
+        val hasAccumulatedTorque = (flags and 0x0004) > 0
+        val accumulatedTorqueFromCrank = (flags and 0x0008) > 0
+        val hasCrankRevs = (flags and 0x0020) > 0
+        val hasExtremeForceMagnitudes = (flags and 0x0040) > 0
+        val hasExtremeTorqueMagnitudes = (flags and 0x0080) > 0
+        val hasExtremeAngles = (flags and 0x0100) > 0
+        val hasDeadSpotAngleTop = (flags and 0x0200) > 0
+        val hasDeadSpotAngleBottom = (flags and 0x0400) > 0
+        val hasAccumulatedEnergy = (flags and 0x0800) > 0
+
+        //Process power data, Watts with resolution of 1
+        val powerWatts = parser.getIntValue(FORMAT_SINT16)
+
+        //Left pedal power
+        val pedalPowerBalancePercent = if (hasPedalPowerBalance) {
+            val halfPercent = parser.getIntValue(FORMAT_UINT8)
+            halfPercent / 2f
+        } else {
+            0
+        }
+
+        if (hasAccumulatedTorque) {
+            val accumulatedTorque_1_32NM = parser.getIntValue(FORMAT_SINT16)
+            val accumulatedTorqueSource = "CRANK" //Not sure what is it
+        } else {
+            val accumulatedTorque_1_32NM = 0
+            val accumulatedTorqueSource = null //Not sure what is it
+        }
+
+        if (hasCrankRevs) {
+            val crankRevs = parser.getIntValue(FORMAT_UINT16)
+            val crankRevsTicks_1_1024Sec = parser.getIntValue(FORMAT_UINT16)
+        } else {
+            val crankRevs = 0
+            val crankRevsTicks_1_1024Sec = 0
+        }
+
+        val accumulatedEnergyKilojoules = if (hasAccumulatedEnergy) {
+            parser.getIntValue(FORMAT_UINT16)
+        } else {
+            0
+        }
+
+        _power.postValue(powerWatts)
     }
 
     //Not sure if must to do it
