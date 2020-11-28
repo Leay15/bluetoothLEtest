@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import java.util.*
+import kotlin.math.floor
 
 class PowerMetterViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -46,6 +47,14 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
     val power: LiveData<Int>
         get() = _power
     private val _power: MutableLiveData<Int> = MutableLiveData(0)
+
+    val speedMph: LiveData<Int>
+        get() = _speedMph
+    private val _speedMph = MutableLiveData(0)
+
+    val speedKph: LiveData<Int>
+        get() = _speedKph
+    private val _speedKph = MutableLiveData(0)
 
     private var powerMetterDevice: BluetoothPeripheral? = null
 
@@ -288,5 +297,42 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
     override fun onCleared() {
         super.onCleared()
         bluetoothCentral.close()
+    }
+
+    private fun computeCaloriesFromHeartRate(heartRate: Int) {
+        // Age in years
+        // Weight in pounds
+        // Time in min  -  NOTE: we want to calculate every second
+        // Heart rate in bpm
+        // kcal Burned M = [(Age x 0.2017) + (Weight x 0.1988) + (Heart Rate x 0.6309)
+        // - 55.0969] x Time / 4.184
+    // kcal Burned F = [(Age x 0.074) + (Weight x
+        // 0.05741) + (Heart Rate x 0.4472) - 20.4022] x Time / 4.184
+    }
+
+    private fun computeSpeedFromPower(power: Int) {
+        //speed_mph = (13.26 * power / (18.1 + power)) +
+        //        (38.88 * power / (586.6 + power));
+        //speed_kph =  1.60934 * speed_mph;
+        val speed_mph = (13.26 * power / (18.1 + power)) + ((38.88 * power) / (586.6 + power))
+        val speed_kph = (1.60934 * speed_mph)
+
+        _speedMph.postValue(floor(speed_mph).toInt())
+        _speedKph.postValue(floor(speed_kph).toInt())
+    }
+
+
+    private fun computeCaloriesFromKJoules(kjoules : Int) {
+        /*
+        * kcal = (SCALE_BY_THOUSAND((float)total_energy) / SCALE_FACTOR_KJ_TO_KCAL) /
+         HUMAN_EFFICIENCY_FACTOR;
+#define HUMAN_EFFICIENCY_FACTOR \
+  0.22f  // Range from 18%-25% with the more active efficient people on the
+         // higher end
+#define KCAL_FROM_KJ(KCAL) (1.0858706511 * (KCAL)) */
+
+        val joules = kjoules * 1000
+        val calories = joules * 0.239
+        val kcals = calories / 1000
     }
 }
