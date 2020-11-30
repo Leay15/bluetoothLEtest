@@ -34,8 +34,6 @@ class MainActivity : AppCompatActivity() {
                 LinearLayoutManager(this@MainActivity, LinearLayoutManager.VERTICAL, false)
         }
 
-//        registerReceiver(bluetoothViewModel.broadcastReceiver,BluetoothDevice.ACTION_FOUND)
-
         bluetoothViewModel.bluetoothDevicesList.observe(this) {
             bluetoothAdapter.addAll(it)
         }

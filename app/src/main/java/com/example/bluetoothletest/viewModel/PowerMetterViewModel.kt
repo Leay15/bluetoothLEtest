@@ -183,33 +183,6 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
         }
-
-        override fun onCharacteristicWrite(
-            peripheral: BluetoothPeripheral,
-            value: ByteArray,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            super.onCharacteristicWrite(peripheral, value, characteristic, status)
-        }
-
-        override fun onDescriptorRead(
-            peripheral: BluetoothPeripheral,
-            value: ByteArray,
-            descriptor: BluetoothGattDescriptor,
-            status: Int
-        ) {
-            super.onDescriptorRead(peripheral, value, descriptor, status)
-        }
-
-        override fun onDescriptorWrite(
-            peripheral: BluetoothPeripheral,
-            value: ByteArray,
-            descriptor: BluetoothGattDescriptor,
-            status: Int
-        ) {
-            super.onDescriptorWrite(peripheral, value, descriptor, status)
-        }
     }
 
     fun scanForPowerMetter() {
@@ -291,6 +264,7 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         _power.postValue(powerWatts)
+
     }
 
     //Not sure if must to do it
@@ -319,8 +293,19 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
 
         _speedMph.postValue(floor(speed_mph).toInt())
         _speedKph.postValue(floor(speed_kph).toInt())
+
+
+        Log.e("SPEED:", speed_kph.toString() + "KMH")
     }
 
+    fun computeDistanceFromSpeed(speedKms : Int, seconds : Int){
+
+        val distance = speedKms * (seconds / 3600)
+    }
+
+    fun computeJoulesFromWatts(watts : Int, accumulatedTimeSeconds : Int){
+        val joules = watts * accumulatedTimeSeconds
+    }
 
     private fun computeCaloriesFromKJoules(kjoules : Int) {
         /*
@@ -334,5 +319,7 @@ class PowerMetterViewModel(application: Application) : AndroidViewModel(applicat
         val joules = kjoules * 1000
         val calories = joules * 0.239
         val kcals = calories / 1000
+
+        Log.e("KCALS:", kcals.toString())
     }
 }
