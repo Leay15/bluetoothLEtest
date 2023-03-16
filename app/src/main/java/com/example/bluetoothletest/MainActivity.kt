@@ -12,12 +12,12 @@ import androidx.lifecycle.ViewModelProviders
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bluetoothletest.adapter.BluetoothDevicesAdapter
 import com.example.bluetoothletest.viewModel.BluetoothViewModel
-import com.example.bluetoothletest.viewModel.PowerMetterViewModel
+import com.example.bluetoothletest.viewModel.PowerMeterViewModel
 import com.welie.blessed.BluetoothPeripheral
 import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
-    val bluetoothViewModel by lazy { ViewModelProvider(this)[PowerMetterViewModel::class.java] }
+    val bluetoothViewModel by lazy { ViewModelProvider(this)[PowerMeterViewModel::class.java] }
 
     val bluetoothAdapter by lazy {
         BluetoothDevicesAdapter(::onDeviceSelected)
@@ -34,13 +34,15 @@ class MainActivity : AppCompatActivity() {
                 LinearLayoutManager(this@MainActivity, LinearLayoutManager.VERTICAL, false)
         }
 
-        bluetoothViewModel.bluetoothDevicesList.observe(this) {
-            bluetoothAdapter.addAll(it)
+        bluetoothViewModel.newPeripheral.observe(this) {
+            it?.run {
+                bluetoothAdapter.add(it)
+            }
         }
 
         bluetoothViewModel.isDeviceConnected.observe(this) {
-            if (it) {
-                bluetoothViewModel.enableDataNotificationChanges(true)
+            if (it == true) {
+                bluetoothViewModel.subscribeToPowerData()
             }
         }
 
@@ -51,7 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        bluetoothViewModel.scanForPowerMetter()
+        bluetoothViewModel.scanForPowerMeter()
     }
 
     private fun onDeviceSelected(peripheral: BluetoothPeripheral) {
