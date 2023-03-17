@@ -27,6 +27,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        bluetoothViewModel.bindToService()
+
         bluetooth_recycler_view?.run {
             adapter = bluetoothAdapter
             setHasFixedSize(true)
@@ -49,6 +51,11 @@ class MainActivity : AppCompatActivity() {
         bluetoothViewModel.power.observe(this) {
             Log.e("POWER: ", it.toString())
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        bluetoothViewModel.disconnectDevice()
     }
 
     override fun onResume() {

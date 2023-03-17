@@ -324,7 +324,7 @@ class PowerMeterService : ServiceScope() {
         if (bluetoothCentral.isBluetoothEnabled) {
             if (bluetoothCentral.isScanning) bluetoothCentral.stopScan()
             bluetoothCentral.scanForPeripheralsWithServices(
-                arrayOf(CYCLING_POWER_SERVICE)
+                arrayOf(CYCLING_POWER_SERVICE, FITNESS_MACHINE_SERVICE_UUID)
             )
             this.async(Dispatchers.IO) {
                 delay(60000)
